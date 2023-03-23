@@ -4,6 +4,8 @@ Updated 3/23/2023
 
 This code uses [pubget](https://neuroquery.github.io/pubget/pubget.html) and [Entrez](https://biopython.org/docs/1.76/api/Bio.Entrez.html) from BioPython to search PubMed Central (PMC) for articles pertaining to a given keyword/task.
 
+In order to use this code, you'll have to `pip install pubget` and `pip install Bio`.
+
 These articles are downloaded locally and correspondence emails are extracted. Then, Entrez searches for the number of other PMC papers that cite a given paper, and we select the top &lt;n> (100?) papers. The correspondence emails of these papers are then written to a txt file and returned.
 
 Files:
