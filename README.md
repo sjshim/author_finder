@@ -8,5 +8,5 @@ These articles are downloaded locally and correspondence emails are extracted. T
 
 Files:
 - `author_finder_functions.py` contains all the functions performing the steps above. Critically, it also contains a dictionary `task_keywords` that decides what to query PMC with based on which task we are searching for. Edit this dictionary to refine results.
-- `author_finder.ipynb` is where you will put in a `ROOT_PATH` to write outputs to, a `task_to_run` to search. You may either call each function from `author_finder_functions` in sequence or use `run_author_finder()` to get the emails in one step. Doing so for each task takes somewhere around 5 minutes.
+- `author_finder.ipynb` is where you will put in a `ROOT_PATH` to write outputs to, and a `task_to_run` to search. You may either call each function from `author_finder_functions` in sequence or use `run_author_finder()` to get the emails in one step. Doing so for each task takes somewhere around 5 minutes.
 
