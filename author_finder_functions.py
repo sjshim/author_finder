@@ -1,6 +1,7 @@
-##### Definitions
+2##### Definitions
 
 import numpy as np
+import pandas as pd
 import os
 from Bio import Entrez
 import xml.etree.ElementTree as ET
@@ -8,30 +9,31 @@ import xml.etree.ElementTree as ET
 ######### CHANGE THIS! KEYWORDS FOR PUBMED CENTRAL SEARCH
 ######### {'internal_task_name': ['query_keyword1', 'query_keyword2']}
 task_keywords = {
-    'spatial_cueing': ['spatial cueing', 'Posner cueing', 'attention network task'],
+    'spatial_cueing': ['spatial cueing', 'Posner cueing'], # , 'attention network task'
     'visual_search': ['visual search'],
     'cued_ts': ['cued task switching', 'cued task-switching', 
                             'spatial task switching', 'spatial task-switching'],
     'ax_cpt': ['AX-CPT', 'AXCPT', 'dot pattern expectancy'],
     'flanker': ['flanker'],
     'stroop': ['stroop'],
-    'stop_signal': ['stop-signal', 'stop signal'],
     'go_nogo': ['go/no go', 'go/no-go', 'go-no go', 'go no go', 'go no-go'],
     'span': ['span task', 'simple span task', 'operation span task', 'complex span task'],
     'change_detection': ['change detection task'],
-    'n_back': ['n-back', 'n back', 'nback']
+    'n_back': ['n-back', 'n back', 'nback'],
+    'stop_signal': ['stop-signal task', 'stop signal task'],
 }
 
 ###### 1. Execute pubget query
 
 def format_keywords(keywords, field='Abstract'):
-    s = f'{keywords[0]}[{field}]'
-    for i in range(1,len(keywords)):
-        s += f' OR {keywords[i]}[{field}])'
-    return '(' + s + ')'
+    if len(keywords) == 1:
+        return f'({keywords[0]}[{field}])' 
+    else:
+        return f'({format_keywords(keywords[1:])} OR {keywords[0]}[{field}])'
 
 def do_pubget_query(keywords, outpath, minyear=2013):
-    query = f'(("{minyear}"[Publication Date] : "3000"[Publication Date]) AND ' + format_keywords(keywords)
+    query = format_keywords(['stop-signal task', 'stop signal task']) 
+    query += f' AND ("{minyear}"[Publication Date] : "3000"[Publication Date])'
 
     command = f'pubget run {outpath} -q "{query}"'
     os.system(command) 
@@ -58,8 +60,7 @@ def get_all_emails(query_path):
         count += 1
         papers += get_emails_from_articleset(os.path.join(query_path, artset))
 
-    papers_with_emails = [i for i in papers if len(i['emails']) > 0]
-    print(f'Result: {len(papers)} papers; {len(papers_with_emails)} with emails.')
+    # papers_with_emails = [i for i in papers if len(i['emails']) > 0]
     return papers
 
 ##### 3. Get citations on all these papers and pick the top 100
@@ -85,9 +86,9 @@ def get_most_cited(papers, n = 100):
     papers_sorted = sorted(papers, key=lambda x: int(x['citation_count']), reverse=True)[:n]
     return papers_sorted
 
-##### 4. Final output of emails to send to
+##### 4. Final output of emails to send to either csv or txt
 
-def write_email_txt(papers, dir_to_write):
+def write_email_txt(papers, dir_to_write, *args):
     all_emails = [email for paper in papers for email in paper['emails']]
     all_emails = np.unique(all_emails)
 
@@ -96,8 +97,34 @@ def write_email_txt(papers, dir_to_write):
 
     return all_emails
 
+# 5 (optional). get csv with all the information we need to validate this approach
+def write_papers_csv(papers, dir_to_write, query_path, task_to_run):
+
+    # get article metadata output
+    metapath = os.path.join(query_path, 'subset_allArticles_extractedData/metadata.csv')
+    meta = pd.read_csv(metapath)[['pmcid', 'doi', 'title', 'journal','publication_year']]
+
+    # deduplicate emails
+    papers_dd = [{'pmcid': int(i['pmcid']), 'emails': np.unique(i['emails']), 'citation_count': i['citation_count']} for i in papers]
+
+    out = pd.DataFrame(columns = list(meta.columns) + [i for i in papers_dd[0].keys() if i != 'pmcid'])
+
+    for i in range(len(papers_dd)):
+        meta_row = meta[meta.pmcid == papers_dd[i]['pmcid']]
+        out.loc[i] = {
+            'pmcid': papers_dd[i]['pmcid'],
+            'doi': meta_row.doi.iloc[0],
+            'title': meta_row.title.iloc[0],
+            'journal': meta_row.journal.iloc[0],
+            'publication_year': meta_row.publication_year.iloc[0],
+            'citation_count': papers_dd[i]['citation_count'],
+            'emails': papers_dd[i]['emails'],
+        }
+    out.to_csv(os.path.join(dir_to_write, task_to_run + '_output.csv'))
+    return out
+
 # All-in-one run
-def run_author_finder(task_to_run, ROOT_PATH):
+def run_author_finder(task_to_run, ROOT_PATH, output = 'txt'):
     outpath = os.path.join(ROOT_PATH, task_to_run)
 
     # pubget query will write a directory at the outpath with the search results
@@ -112,8 +139,11 @@ def run_author_finder(task_to_run, ROOT_PATH):
     # gets top 100 most cited
     papers_top = get_most_cited(papers, n=100)
 
-    # write csv with top 100 emails
-    all_emails = write_email_txt(papers_top, outpath)
+    # write file with top 100 emails
+    if output == 'csv':
+        all_emails = write_papers_csv(papers_top, outpath, query_path, task_to_run)
+    else:
+        all_emails = write_email_txt(papers_top, outpath)
 
     return all_emails
 
