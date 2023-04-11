@@ -9,17 +9,16 @@ import xml.etree.ElementTree as ET
 ######### CHANGE THIS! KEYWORDS FOR PUBMED CENTRAL SEARCH
 ######### {'internal_task_name': ['query_keyword1', 'query_keyword2']}
 task_keywords = {
-    'spatial_cueing': ['spatial cueing', 'Posner cueing'], # , 'attention network task'
-    'visual_search': ['visual search'],
-    'cued_ts': ['cued task switching', 'cued task-switching', 
-                            'spatial task switching', 'spatial task-switching'],
+    'spatial_cueing': ['spatial cueing task', 'Posner cueing task', 'Posner paradigm', 'spatial cueing paradigm'], # , 'attention network task'
+    'visual_search': ['visual search task', 'visual search paradigm'],
+    'cued_ts': ['cued task switching', 'cued task-switching', 'spatial task switching', 'spatial task-switching'], # 'task switching task'
     'ax_cpt': ['AX-CPT', 'AXCPT', 'dot pattern expectancy'],
-    'flanker': ['flanker'],
-    'stroop': ['stroop'],
-    'go_nogo': ['go/no go', 'go/no-go', 'go-no go', 'go no go', 'go no-go'],
-    'span': ['span task', 'simple span task', 'operation span task', 'complex span task'],
+    'flanker': ['flanker task'],
+    'stroop': ['stroop task'],
+    'go_nogo': ['go/no go task', 'go/no-go task', 'go-no go task', 'go no go task', 'go no-go task'],
+    'span': ['span task'],
     'change_detection': ['change detection task'],
-    'n_back': ['n-back', 'n back', 'nback'],
+    'n_back': ['n-back task', 'n back task', 'nback task'],
     'stop_signal': ['stop-signal task', 'stop signal task'],
 }
 
@@ -32,7 +31,7 @@ def format_keywords(keywords, field='Abstract'):
         return f'({format_keywords(keywords[1:])} OR {keywords[0]}[{field}])'
 
 def do_pubget_query(keywords, outpath, minyear=2013):
-    query = format_keywords(['stop-signal task', 'stop signal task']) 
+    query = format_keywords(keywords) 
     query += f' AND ("{minyear}"[Publication Date] : "3000"[Publication Date])'
 
     command = f'pubget run {outpath} -q "{query}"'
@@ -52,13 +51,16 @@ def get_emails_from_articleset(set_path):
     print(f"Out of {len(emails)} papers, {found} had emails and {len(emails) - found} did not.")
     return emails
 
-def get_all_emails(query_path):
+def get_all_emails(outpath):
+    articleset_path = os.path.join(outpath, 
+                                [i for i in os.listdir(outpath) if i.startswith('query')][0],
+                                'articlesets')
     papers = []
     count = 1
-    for artset in [i for i in os.listdir(query_path) if i.endswith('.xml')]:
+    for artset in [i for i in os.listdir(articleset_path) if i.endswith('.xml')]:
         print(f'Article set #{count}:')
         count += 1
-        papers += get_emails_from_articleset(os.path.join(query_path, artset))
+        papers += get_emails_from_articleset(os.path.join(articleset_path, artset))
 
     # papers_with_emails = [i for i in papers if len(i['emails']) > 0]
     return papers
@@ -88,21 +90,24 @@ def get_most_cited(papers, n = 100):
 
 ##### 4. Final output of emails to send to either csv or txt
 
-def write_email_txt(papers, dir_to_write, *args):
+def write_email_txt(papers, outpath, *args):
     all_emails = [email for paper in papers for email in paper['emails']]
     all_emails = np.unique(all_emails)
 
-    with open(os.path.join(dir_to_write, 'emails.txt'), 'w') as file:
+    with open(os.path.join(outpath, 'emails.txt'), 'w') as file:
         file.write('\n'.join(all_emails))    
 
     return all_emails
 
 # 5 (optional). get csv with all the information we need to validate this approach
-def write_papers_csv(papers, dir_to_write, query_path, task_to_run):
+def write_papers_csv(papers, outpath, task_to_run):
 
     # get article metadata output
-    metapath = os.path.join(query_path, 'subset_allArticles_extractedData/metadata.csv')
-    meta = pd.read_csv(metapath)[['pmcid', 'doi', 'title', 'journal','publication_year']]
+    meta_path = os.path.join(outpath, 
+                          [i for i in os.listdir(outpath) if i.startswith('query')][0],
+                          'subset_allArticles_extractedData/metadata.csv')
+
+    meta = pd.read_csv(meta_path)[['pmcid', 'doi', 'title', 'journal','publication_year']]
 
     # deduplicate emails
     papers_dd = [{'pmcid': int(i['pmcid']), 'emails': np.unique(i['emails']), 'citation_count': i['citation_count']} for i in papers]
@@ -120,32 +125,32 @@ def write_papers_csv(papers, dir_to_write, query_path, task_to_run):
             'citation_count': papers_dd[i]['citation_count'],
             'emails': papers_dd[i]['emails'],
         }
-    out.to_csv(os.path.join(dir_to_write, task_to_run + '_output.csv'))
+    out.to_csv(os.path.join(outpath, task_to_run + '_output.csv'))
     return out
 
 # All-in-one run
-def run_author_finder(task_to_run, ROOT_PATH, output = 'txt'):
-    outpath = os.path.join(ROOT_PATH, task_to_run)
+def run_author_finder(tasks_to_run, ROOT_PATH, output = 'txt'):
 
-    # pubget query will write a directory at the outpath with the search results
-    do_pubget_query(task_keywords[task_to_run], outpath)
+    for task_to_run in tasks_to_run:
+        print('STARTING TASK: ' + task_to_run)
+        outpath = os.path.join(ROOT_PATH, task_to_run)
 
-    query_path = os.path.join(outpath, 
-                              [i for i in os.listdir(ROOT_PATH + task_to_run) if i.startswith('query')][0],
-                              'articlesets')
-    # gets list of dicts with pmcid and emails
-    papers = get_all_emails(query_path)
+        # pubget query will write a directory at the outpath with the search results
+        do_pubget_query(task_keywords[task_to_run], outpath)
 
-    # gets top 100 most cited
-    papers_top = get_most_cited(papers, n=100)
+        # gets list of dicts with pmcid and emails
+        papers = get_all_emails(outpath)
 
-    # write file with top 100 emails
-    if output == 'csv':
-        all_emails = write_papers_csv(papers_top, outpath, query_path, task_to_run)
-    else:
-        all_emails = write_email_txt(papers_top, outpath)
+        # gets top 100 most cited
+        papers_top = get_most_cited(papers, n=100)
 
-    return all_emails
+        # write file with top 100 emails
+        if output == 'csv':
+            all_emails = write_papers_csv(papers_top, outpath, task_to_run)
+        else:
+            all_emails = write_email_txt(papers_top, outpath)
+
+    return 'Done!'
 
 
 
