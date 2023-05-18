@@ -1,25 +1,26 @@
-2##### Definitions
+##### Definitions
 
 import numpy as np
 import pandas as pd
 import os
 from Bio import Entrez
 import xml.etree.ElementTree as ET
+import subprocess
 
 ######### CHANGE THIS! KEYWORDS FOR PUBMED CENTRAL SEARCH
 ######### {'internal_task_name': ['query_keyword1', 'query_keyword2']}
 task_keywords = {
     'spatial_cueing': ['spatial cueing task', 'Posner cueing task', 'Posner paradigm', 'spatial cueing paradigm'], # , 'attention network task'
     'visual_search': ['visual search task', 'visual search paradigm'],
-    'cued_ts': ['cued task switching', 'cued task-switching', 'spatial task switching', 'spatial task-switching'], # 'task switching task'
-    'ax_cpt': ['AX-CPT', 'AXCPT', 'dot pattern expectancy'],
-    'flanker': ['flanker task'],
-    'stroop': ['stroop task'],
-    'go_nogo': ['go/no go task', 'go/no-go task', 'go-no go task', 'go no go task', 'go no-go task'],
-    'span': ['span task'],
-    'change_detection': ['change detection task'],
-    'n_back': ['n-back task', 'n back task', 'nback task'],
-    'stop_signal': ['stop-signal task', 'stop signal task'],
+    'cued_ts': ['cued task switching', 'cued task-switching', 'spatial task switching', 'spatial task-switching', 'task switching task', 'task switching paradigm', 'task-switching task', 'task-switching paradigm'], # 'task switching task'
+    'ax_cpt': ['AX-CPT', 'AXCPT', 'dot pattern expectancy', 'AX Continuous Performance Test', 'DPX task', 'DPX paradigm'],
+    'flanker': ['flanker task', 'Eriksen flanker', 'flanker paradigm'],
+    'stroop': ['stroop task', 'stroop test', 'stroop paradigm', 'stroop effect'],
+    'go_nogo': ['go/no go task', 'go/no-go task', 'go-no go task', 'go no go task', 'go no-go task', 'go nogo task', 'go nogo paradigm', 'go/no go paradigm', 'go/no-go paradigm', 'go-no go paradigm', 'go no go paradigm', 'go no-go paradigm', 'go nogo paradigm'],
+    'span': ['span task', 'working memory span task', 'complex span task', 'simple span task', 'working memory span paradigm', 'complex span paradigm', 'simple span paradigm'],
+    'change_detection': ['change detection task', 'change detection paradigm'], # try running without change blindness prompts (5/17)
+    'n_back': ['n-back task', 'n back task', 'nback task', 'n-back paradigm', 'n back paradigm', 'nback paradigm'], # evaluate if capitalization matters (5/17)
+    'stop_signal': ['stop-signal task', 'stop signal task', 'stop-signal paradigm', 'stop signal paradigm'], # try running with stop signal paradigm (5/17)
 }
 
 ###### 1. Execute pubget query
@@ -28,14 +29,20 @@ def format_keywords(keywords, field='Abstract'):
     if len(keywords) == 1:
         return f'({keywords[0]}[{field}])' 
     else:
-        return f'({format_keywords(keywords[1:])} OR {keywords[0]}[{field}])'
+        return f'({keywords[0]}[{field}]) OR {format_keywords(keywords[1:])}'
 
-def do_pubget_query(keywords, outpath, minyear=2013):
+
+def do_pubget_query(task, outpath, minyear=2008):
+    keywords = task_keywords[task]
     query = format_keywords(keywords) 
-    query += f' AND ("{minyear}"[Publication Date] : "3000"[Publication Date])'
+    query += f' AND ("{minyear}"[Publication Date] : "2023"[Publication Date])'
 
-    command = f'pubget run {outpath} -q "{query}"'
-    os.system(command) 
+    command = f'pubget run {outpath} -q \'"{query}"\''
+
+    print(f"Executing command: {command}")
+    subprocess.run(['pubget', 'run', outpath, '-q', query])
+
+    print(f"Files in {outpath}: {os.listdir(outpath)}")
 
 ###### 2. Collect PMCIDs and emails of downloaded pubget files
 
@@ -55,6 +62,7 @@ def get_all_emails(outpath):
     articleset_path = os.path.join(outpath, 
                                 [i for i in os.listdir(outpath) if i.startswith('query')][0],
                                 'articlesets')
+    print("article set path: ", articleset_path)
     papers = []
     count = 1
     for artset in [i for i in os.listdir(articleset_path) if i.endswith('.xml')]:
@@ -68,7 +76,7 @@ def get_all_emails(outpath):
 ##### 3. Get citations on all these papers and pick the top 100
 
 def get_most_cited(papers, n = 100):
-    Entrez.email = 'csiyer@stanford.edu'
+    Entrez.email = 'sjshim@stanford.edu'
 
     for i in range(len(papers)):
         id = papers[i]['pmcid']
@@ -135,8 +143,11 @@ def run_author_finder(tasks_to_run, ROOT_PATH, output = 'txt'):
         print('STARTING TASK: ' + task_to_run)
         outpath = os.path.join(ROOT_PATH, task_to_run)
 
+        # Create output directory if it does not exist
+        os.makedirs(outpath, exist_ok=True)
+
         # pubget query will write a directory at the outpath with the search results
-        do_pubget_query(task_keywords[task_to_run], outpath)
+        do_pubget_query(task_to_run, outpath)
 
         # gets list of dicts with pmcid and emails
         papers = get_all_emails(outpath)
